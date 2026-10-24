@@ -1,218 +1,115 @@
-# AWS EC2 Website Deployment Using Apache Web Server
+# AWS EC2 Docker Website Hosting — Mini Project
 
-## Project Overview
+## Objective
+Deploy a static website to an AWS EC2 Linux instance using Docker and Nginx.
 
-This project demonstrates the deployment of a static eCommerce website on an Amazon Web Services (AWS) EC2 instance using the Apache2 Web Server.
+## Project files
+- `index.html` — sample website.
+- `Dockerfile` — builds an Nginx image and copies the website into it.
+- `.dockerignore` — excludes unnecessary files from the build context.
+- `deploy.sh` — builds the image and starts/replaces the container.
+- `README.md` — this guide.
 
-The objective of this project was to provision an Ubuntu Linux server, configure network security, install and configure Apache2, securely transfer website files, and host the website using the EC2 instance's public IPv4 address.
+## Architecture
+Browser → EC2 Public IPv4 address:8080 → Docker port mapping 8080:80 → Nginx container → index.html
 
-## Technologies Used
+## Prerequisites
+- AWS account with permission to create EC2 and security groups.
+- An EC2 instance running Amazon Linux 2023 (recommended for this guide).
+- SSH access to the instance.
+- Docker installed and running.
 
-| Technology | Purpose |
-|---|---|
-| AWS EC2 | Cloud server hosting |
-| Ubuntu Linux | Server operating system |
-| Apache2 | Web server |
-| AWS Security Groups | Network traffic management |
-| SSH | Secure server access |
-| SCP | Secure file transfer |
-| Linux Commands | File and server management |
+## 1. Launch an EC2 instance
+1. Open AWS Console → EC2 → Launch instance.
+2. Name it `docker-website-demo`.
+3. Select Amazon Linux 2023.
+4. For a learning demo, choose an eligible small instance type within your budget/free-tier eligibility.
+5. Create or select a key pair and keep the private key secure.
+6. In the security group, allow SSH (TCP 22) only from **My IP**.
+7. Add a custom inbound rule for TCP port `8080` from `0.0.0.0/0` only if you intend the demo website to be public. For real deployments, restrict access as appropriate.
+8. Launch the instance and note its Public IPv4 address.
 
-## Project Architecture
-
-```text
-Local Machine
-     |
-     | SCP (Website ZIP File)
-     v
-AWS EC2 Instance (Ubuntu Linux)
-     |
-     v
-Apache2 Web Server
-     |
-     v
-/var/www/html/
-     |
-     | HTTP Port 80
-     v
-EC2 Public IPv4 Address
-     |
-     v
-Zay eCommerce Website
-```
-
-## EC2 Instance Configuration
-
-| Parameter | Configuration |
-|---|---|
-| Cloud Provider | AWS |
-| Instance Name | web-hosting-mini-project |
-| Operating System | Ubuntu Linux |
-| Instance Type | t3.micro |
-| Key Pair | xyz-key-ec2.pem |
-| Web Server | Apache2 |
-| HTTP Port | 80 |
-| SSH Port | 22 |
-| Document Root | /var/www/html/ |
-
-## Step-by-Step Deployment Process
-
-### Step 1: Launch AWS EC2 Instance
-
-1. Logged in to the AWS Management Console.
-2. Navigated to EC2 → Launch Instance.
-3. Entered the instance name `web-hosting-mini-project`.
-4. Selected Ubuntu Linux as the operating system.
-5. Selected `t3.micro` as the instance type.
-6. Configured the SSH key pair `xyz-key-ec2.pem`.
-7. Launched the EC2 instance.
-
-### Step 2: Configure Security Group
-
-Configured the Security Group inbound rules to allow HTTP and SSH traffic.
-
-| Rule Type | Protocol | Port |
-|---|---|---|
-| SSH | TCP | 22 |
-| HTTP | TCP | 80 |
-
-HTTP traffic allows users to access the hosted website through a web browser.
-
-### Step 3: Connect to EC2 Instance
-
-Connected to the Ubuntu EC2 instance using AWS EC2 Instance Connect.
-
-After establishing the connection, accessed the Linux terminal to perform server configuration.
-
-### Step 4: Install Apache2 Web Server
-
-Updated the Ubuntu package repository:
+## 2. Connect over SSH
+From a terminal on your computer (replace the key path and public IP):
 
 ```bash
-sudo apt update
+chmod 400 my-key.pem
+ssh -i my-key.pem ec2-user@YOUR_EC2_PUBLIC_IP
 ```
 
-Installed Apache2:
+Do not upload your private key to GitHub or share it.
+
+## 3. Install and start Docker (Amazon Linux 2023)
+Run on the EC2 instance:
 
 ```bash
-sudo apt install apache2 -y
+sudo dnf update -y
+sudo dnf install -y docker git
+sudo systemctl enable --now docker
+sudo docker --version
+sudo docker ps
 ```
 
-Verified Apache installation:
+For simplicity and least-privilege awareness, use `sudo docker ...` commands. You can configure non-root Docker access separately, but membership in the `docker` group effectively grants root-level control.
+
+## 4. Get the project files onto EC2
+Option A — create files directly on EC2: create a folder and use a text editor to create `index.html`, `Dockerfile`, `.dockerignore`, and `deploy.sh` using the contents supplied in this project.
+
+Option B — after uploading this project to your own Git repository, clone it:
 
 ```bash
-sudo systemctl status apache2
+git clone YOUR_PUBLIC_REPOSITORY_URL
+cd aws-ec2-docker-website-mini-project
 ```
 
-**Result:** Apache2 Web Server was successfully installed.
+Do not use a placeholder URL; replace it with your actual repository URL.
 
-### Step 5: Transfer Website Files Using SCP
-
-Transferred the Zay eCommerce website ZIP file from the local machine to the EC2 instance using Secure Copy Protocol (SCP).
-
-Example command:
+## 5. Deploy
+From the folder containing `Dockerfile` and `index.html`:
 
 ```bash
-scp -i xyz-key-ec2.pem "website.zip" ubuntu@<PUBLIC-IP>:/home/ubuntu/
+chmod +x deploy.sh
+sudo ./deploy.sh
 ```
 
-SCP provides secure file transfer between the local machine and the remote EC2 server.
-
-### Step 6: Extract Website Files
-
-Installed the unzip utility:
+Or run the Docker commands manually:
 
 ```bash
-sudo apt install unzip -y
+sudo docker build -t aws-ec2-website:v1 .
+sudo docker run -d --restart unless-stopped --name aws-ec2-website -p 8080:80 aws-ec2-website:v1
+sudo docker ps
+curl http://localhost:8080
 ```
 
-Extracted the website ZIP archive:
+If the container name already exists, remove it before running the manual command again:
 
 ```bash
-unzip website.zip
+sudo docker rm -f aws-ec2-website
 ```
 
-Verified the extracted project files:
+## 6. Open the website
+In your browser, visit:
 
+`http://YOUR_EC2_PUBLIC_IP:8080`
+
+Replace the placeholder with the instance's actual Public IPv4 address. The EC2 security group must allow inbound TCP 8080, and the instance must have a reachable public IPv4 address and route.
+
+## 7. Troubleshooting
 ```bash
-ls -la
+sudo docker ps -a
+sudo docker logs aws-ec2-website
+sudo ss -tulnp
+curl -I http://localhost:8080
 ```
 
-**Result:** The website files were extracted on the Ubuntu EC2 instance.
+- Browser timeout: verify EC2 public IPv4, internet route, and security-group TCP 8080 rule.
+- Container exits: inspect `sudo docker logs aws-ec2-website`.
+- Port conflict: use `HOST_PORT=8081 sudo -E ./deploy.sh` or edit the script/commands to map `8081:80`, and allow TCP 8081 in the security group.
+- SSH failure: confirm the key pair, username `ec2-user`, and SSH source-IP rule.
 
-### Step 7: Deploy Website Using Apache
+## Security and cost cleanup
+- Do not open SSH (22) to everyone (`0.0.0.0/0`).
+- Port 8080 is exposed publicly in this demo; for production, use HTTPS, a domain, and a properly configured reverse proxy/load balancer.
+- AWS charges may apply while resources are running, depending on your account and region.
+- When finished, stop or terminate the EC2 instance if you no longer need it, and remove unused resources. Termination deletes the instance's local data unless separately preserved.
 
-Navigated to the Apache document root:
-
-```bash
-cd /var/www/html/
-```
-
-Removed the default Apache index page:
-
-```bash
-sudo rm index.html
-```
-
-Copied the website project files into the Apache document root.
-
-Example command when running inside the extracted website folder:
-
-```bash
-sudo cp -r . /var/www/html/
-```
-
-**Explanation:**
-
-Removed the default Apache `index.html` file and copied the website project files into `/var/www/html/` to serve the custom eCommerce website.
-
-The website's main `index.html` file must be located directly inside the Apache document root.
-
-### Step 8: Verify Website Deployment
-
-1. Opened a web browser.
-2. Entered the EC2 instance's public IPv4 address.
-3. Accessed the website using HTTP.
-
-```text
-http://<EC2-PUBLIC-IP>
-```
-
-4. Verified that the Zay eCommerce website loaded successfully.
-
-**Result:** The website was successfully accessible through the EC2 public IPv4 address.
-
-## Common Troubleshooting
-
-| Issue | Possible Solution |
-|---|---|
-| Website not loading | Check HTTP port 80 in Security Groups |
-| SSH connection failed | Verify key pair and SSH access |
-| Apache not running | Check `sudo systemctl status apache2` |
-| Website showing default page | Verify the custom index.html file |
-| Permission denied | Check file and directory permissions |
-| SCP transfer failed | Verify key path, public IP and SCP syntax |
-
-## Project Outcome
-
-Successfully deployed and hosted a static Zay eCommerce website on an AWS EC2 Ubuntu instance using Apache2 Web Server.
-
-The website was accessible through the EC2 public IPv4 address over HTTP.
-
-## Skills Demonstrated
-
-- AWS EC2 instance provisioning
-- Ubuntu Linux administration
-- Apache2 web server installation and configuration
-- AWS Security Group configuration
-- SSH and SCP operations
-- Linux file management
-- Static website deployment
-- Cloud infrastructure fundamentals
-- Basic deployment troubleshooting
-
-## Conclusion
-
-This project provided hands-on experience with AWS cloud infrastructure, Linux server administration, Apache Web Server configuration, secure file transfer, and static website deployment.
-
-It demonstrates the practical process of hosting a web application on an AWS EC2 instance and making it publicly accessible through HTTP.
